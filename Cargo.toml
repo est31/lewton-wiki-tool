@@ -1,0 +1,17 @@
+[package]
+name = "lewton-wiki-tool"
+version = "0.1.0"
+authors = ["est31 <MTest31@outlook.com>"]
+
+[dependencies]
+# lewton related
+cmp = { git = "https://github.com/RustAudio/lewton/" }
+
+# Downloading stuff
+hyper = "0.12"
+hyper-tls = "0.3"
+openssl = "0.10"
+hyper-openssl = "0.6"
+tokio = "0.1"
+percent-encoding = "1.0"
+md5 = "0.5"
