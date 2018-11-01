@@ -7,7 +7,8 @@ extern crate tokio;
 extern crate md5;
 extern crate percent_encoding;
 
-use std::env;
+extern crate structopt;
+
 use std::io::{self, Write};
 
 use hyper::{Client, Request, Body};
@@ -21,32 +22,49 @@ use tokio::runtime::current_thread::Runtime;
 
 use percent_encoding::{utf8_percent_encode, DEFAULT_ENCODE_SET};
 
+use structopt::StructOpt;
+
 // user agent to use
 const AGENT :&str = "lewton wiki tool";
 
+#[derive(StructOpt, Debug)]
+//#[structopt]
+enum Options {
+	#[structopt(name = "get")]
+	Get {
+		name :String,
+	},
+	#[structopt(name = "show-url")]
+	ShowUrl {
+		name :String,
+	},
+}
+
 fn main() {
-	// Some simple CLI args requirements...
-	let url = match env::args().nth(1) {
-		Some(url) => url,
-		None => {
-			println!("Usage: client <url>");
-			return;
-		}
-	};
+	let options = Options::from_args();
 
-	let url = get_medium_url(&url);
-	let url = url.parse::<hyper::Uri>().unwrap();
+	match options {
+		Options::ShowUrl { name } => {
+			let url = get_medium_url(&name);
+			println!("URL is: {}", url);
+		},
+		Options::Get { name } => {
 
-	let client = create_client();
-	// Run the runtime with the future trying to fetch and print this URL.
-	//
-	// Note that in more complicated use cases, the runtime should probably
-	// run on its own, and futures should just be spawned into it.
-	let mut runtime = Runtime::new().unwrap();
+			let url = get_medium_url(&name);
+			let url = url.parse::<hyper::Uri>().unwrap();
 
-	runtime.spawn(fetch_url(&client, url));
+			let client = create_client();
+			// Run the runtime with the future trying to fetch and print this URL.
+			//
+			// Note that in more complicated use cases, the runtime should probably
+			// run on its own, and futures should just be spawned into it.
+			let mut runtime = Runtime::new().unwrap();
 
-	runtime.run().unwrap();
+			runtime.spawn(fetch_url(&client, url));
+
+			runtime.run().unwrap();
+		},
+	}
 }
 
 fn get_medium_url(name :&str) -> String {
