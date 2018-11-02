@@ -2,6 +2,8 @@
 name = "lewton-wiki-tool"
 version = "0.1.0"
 authors = ["est31 <MTest31@outlook.com>"]
+license = "MIT/Apache-2.0"
+readme = "README.md"
 
 [dependencies]
 # lewton related
