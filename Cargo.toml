@@ -8,6 +8,7 @@ readme = "README.md"
 [dependencies]
 # lewton related
 cmp = { git = "https://github.com/RustAudio/lewton/" }
+ogg = "0.7"
 
 # Downloading stuff
 hyper = "0.12"
