@@ -1,4 +1,6 @@
 extern crate cmp;
+#[macro_use]
+extern crate crossbeam_channel;
 
 extern crate hyper;
 extern crate openssl;
@@ -10,6 +12,8 @@ extern crate percent_encoding;
 extern crate structopt;
 
 use std::io::Cursor;
+use std::io::{BufRead, BufReader};
+use std::fs::File;
 
 use hyper::{Client, Request, Body};
 use hyper::header::USER_AGENT;
@@ -33,6 +37,10 @@ enum Options {
 	Get {
 		name :String,
 	},
+	#[structopt(name = "get-list")]
+	GetList {
+		list_path :String,
+	},
 	#[structopt(name = "show-url")]
 	ShowUrl {
 		name :String,
@@ -48,22 +56,35 @@ fn main() {
 			println!("URL is: {}", url);
 		},
 		Options::Get { name } => {
-
-			let url = get_medium_url(&name);
-			let url = url.parse::<hyper::Uri>().unwrap();
-
 			let client = create_client();
-			// Run the runtime with the future trying to fetch and print this URL.
-			//
-			// Note that in more complicated use cases, the runtime should probably
-			// run on its own, and futures should just be spawned into it.
+
 			let mut runtime = Runtime::new().unwrap();
 
-			runtime.spawn(fetch_url(&client, url));
+			spawn_name(&mut runtime, &client, &name);
 
 			runtime.run().unwrap();
 		},
+		Options::GetList { list_path } => {
+			println!("opening list file {}", list_path);
+			let f = File::open(list_path).unwrap();
+			let mut br = BufReader::new(f);
+			let mut runtime = Runtime::new().unwrap();
+
+			let client = create_client();
+			for l in br.lines() {
+				let name = l.unwrap();
+				//println!("DOOO {}", l.unwrap());
+				spawn_name(&mut runtime, &client, &name);
+			}
+			runtime.run().unwrap();
+		}
 	}
+}
+
+fn spawn_name(runtime :&mut Runtime, client :&Client<HttpsConnector<HttpConnector>>, name :&str) {
+	let url = get_medium_url(name);
+	let url = url.parse::<hyper::Uri>().unwrap();
+	runtime.spawn(fetch_url(&client, url));
 }
 
 fn get_medium_url(name :&str) -> String {
@@ -105,12 +126,15 @@ fn fetch_url<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri) -
 			println!("Response version: {:?}", res.version());
 			println!("Headers: {:#?}", res.headers());
 
-			res.into_body().concat2().map(|body| {
-				println!("body is {} characters long", body.len());
-				let cursor1 = Cursor::new(&body);
-				let cursor2 = Cursor::new(&body);
-				let res = cmp::cmp_output(cursor1, cursor2);
-				println!("Comparison result: {:?}", res);
+			let is_success = res.status().is_success();
+			res.into_body().concat2().map(move |body| {
+				if is_success {
+					println!("body is {} characters long", body.len());
+					let cursor1 = Cursor::new(&body);
+					let cursor2 = Cursor::new(&body);
+					let res = cmp::cmp_output(cursor1, cursor2);
+					println!("Comparison result: {:?}", res);
+				}
 			})
 		})
 		// If all good, just tell the user...

@@ -8,6 +8,7 @@ readme = "README.md"
 [dependencies]
 # lewton related
 cmp = { git = "https://github.com/RustAudio/lewton/" }
+crossbeam-channel = "0.2"
 
 # Downloading stuff
 hyper = "0.12"
