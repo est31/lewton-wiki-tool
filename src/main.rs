@@ -1,6 +1,9 @@
 extern crate cmp;
 #[macro_use]
 extern crate crossbeam_channel;
+#[macro_use]
+extern crate serde;
+extern crate serde_json;
 
 extern crate hyper;
 extern crate openssl;
@@ -27,6 +30,12 @@ use tokio::runtime::current_thread::Runtime;
 use percent_encoding::{utf8_percent_encode, DEFAULT_ENCODE_SET};
 
 use structopt::StructOpt;
+
+use crossbeam_channel::Sender;
+
+use tokio::prelude::future::ok;
+
+use tokio::prelude::future::Either;
 
 // user agent to use
 const AGENT :&str = "lewton wiki tool";
@@ -60,7 +69,9 @@ fn main() {
 
 			let mut runtime = Runtime::new().unwrap();
 
-			spawn_name(&mut runtime, &client, &name);
+			let url = get_medium_url(&name);
+			let url = url.parse::<hyper::Uri>().unwrap();
+			runtime.spawn(fetch_url_verbose(&client, url));
 
 			runtime.run().unwrap();
 		},
@@ -71,20 +82,29 @@ fn main() {
 			let mut runtime = Runtime::new().unwrap();
 
 			let client = create_client();
+
+			let (s, r) = crossbeam_channel::unbounded();
+
+			std::thread::spawn(move || {
+				while let Some(msg) =  r.recv() {
+					println!("{:?}", msg);
+				}
+			});
 			for l in br.lines() {
 				let name = l.unwrap();
-				//println!("DOOO {}", l.unwrap());
-				spawn_name(&mut runtime, &client, &name);
+				let url = get_medium_url(&name);
+				let url = url.parse::<hyper::Uri>().unwrap();
+				runtime.spawn(fetch_url(&client, url, s.clone()));
 			}
 			runtime.run().unwrap();
 		}
 	}
 }
 
-fn spawn_name(runtime :&mut Runtime, client :&Client<HttpsConnector<HttpConnector>>, name :&str) {
-	let url = get_medium_url(name);
-	let url = url.parse::<hyper::Uri>().unwrap();
-	runtime.spawn(fetch_url(&client, url));
+#[derive(Debug)]
+enum RequestResult {
+	RequestSuccess(Result<(usize, usize), String>),
+	RequestError(String),
 }
 
 fn get_medium_url(name :&str) -> String {
@@ -94,7 +114,6 @@ fn get_medium_url(name :&str) -> String {
 	let name_percent_encoded = utf8_percent_encode(name, DEFAULT_ENCODE_SET);
 	let url = format!("https://upload.wikimedia.org/wikipedia/commons/{}/{}/{}",
 		&hash_hex[..1], &hash_hex[..2], name_percent_encoded);
-	println!("{}", url);
 	url
 }
 
@@ -112,7 +131,7 @@ fn create_client() -> Client<HttpsConnector<HttpConnector>> {
 	client
 }
 
-fn fetch_url<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri) -> impl Future<Item=(), Error=()> {
+fn fetch_url_verbose<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri) -> impl Future<Item=(), Error=()> {
 
 	let mut req = Request::builder();
 	req.uri(url)
@@ -120,7 +139,6 @@ fn fetch_url<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri) -
 
 	client
 		.request(req.body(Body::empty()).unwrap())
-		// If we get a response back
 		.and_then(|res| {
 			println!("Response: {} success: {}", res.status(), res.status().is_success());
 			println!("Response version: {:?}", res.version());
@@ -137,12 +155,41 @@ fn fetch_url<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri) -
 				}
 			})
 		})
-		// If all good, just tell the user...
 		.map(|_| {
 			println!("\n\nDone.");
 		})
-		// If there was an error, let the user know...
 		.map_err(|err| {
 			eprintln!("Error {}", err);
 		})
+}
+
+fn fetch_url<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri, sender :Sender<RequestResult>) -> impl Future<Item=(), Error=()> {
+
+	let mut req = Request::builder();
+
+	req.uri(url)
+		.header(USER_AGENT, AGENT);
+
+	client
+		.request(req.body(Body::empty()).unwrap())
+		.then(move |res| {
+			match res {
+				Ok(res) => {
+					let status = res.status();
+					Either::A(res.into_body().concat2().map(move |body| {
+						if status.is_success() {
+							let cursor1 = Cursor::new(&body);
+							let cursor2 = Cursor::new(&body);
+							let res = cmp::cmp_output(cursor1, cursor2);
+							sender.send(RequestResult::RequestSuccess(res));
+						}
+					}))
+				},
+				Err(err) => {
+					sender.send(RequestResult::RequestError(format!("{}", err)));
+					Either::B(ok(()))
+				},
+			}
+		})
+		.map_err(|err| {})
 }
