@@ -1,8 +1,9 @@
 extern crate cmp;
 #[macro_use]
 extern crate crossbeam_channel;
-#[macro_use]
 extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate serde_json;
 
 extern crate hyper;
@@ -33,9 +34,11 @@ use structopt::StructOpt;
 
 use crossbeam_channel::Sender;
 
-use tokio::prelude::future::ok;
+use tokio::prelude::future::{ok, Either};
 
-use tokio::prelude::future::Either;
+use serde::Serialize;
+
+use serde_json::to_string;
 
 // user agent to use
 const AGENT :&str = "lewton wiki tool";
@@ -90,7 +93,7 @@ fn main() {
 
 			std::thread::spawn(move || {
 				while let Some(msg) =  r.recv() {
-					println!("{:?}", msg);
+					println!("{}", to_string(&msg).unwrap());
 				}
 			});
 
@@ -105,7 +108,7 @@ fn main() {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct RequestRes {
 	/// Filename that was requested
 	file_name :String,
@@ -113,12 +116,12 @@ struct RequestRes {
 	result_kind :RequestResKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 enum RequestResKind {
 	/// Successful response, with comparison result inside
 	Success(Result<(usize, usize), String>),
 	/// Got a response but with wrong status code
-	WrongResponse(StatusCode),
+	WrongResponse(u16),
 	/// Error during obtaining a response
 	Error(String),
 }
@@ -208,7 +211,7 @@ fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sen
 							let res = cmp::cmp_output(cursor1, cursor2);
 							send_kind(RequestResKind::Success(res));
 						} else {
-							send_kind(RequestResKind::WrongResponse(status));
+							send_kind(RequestResKind::WrongResponse(status.as_u16()));
 						}
 					}))
 				},
