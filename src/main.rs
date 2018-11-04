@@ -18,14 +18,14 @@ use std::io::Cursor;
 use std::io::{BufRead, BufReader};
 use std::fs::File;
 
-use hyper::{Client, Request, Body};
+use hyper::{Client, Request, Body, StatusCode};
 use hyper::header::USER_AGENT;
 use hyper::rt::{Future, Stream};
 use hyper::client::connect::{HttpConnector, Connect};
 use hyper_openssl::HttpsConnector;
 use openssl::ssl::{SslMethod, SslConnector};
 
-use tokio::runtime::current_thread::Runtime;
+use tokio::runtime::Runtime;
 
 use percent_encoding::{utf8_percent_encode, DEFAULT_ENCODE_SET};
 
@@ -49,6 +49,8 @@ enum Options {
 	#[structopt(name = "get-list")]
 	GetList {
 		list_path :String,
+		#[structopt(name = "j")]
+		jobs :Option<usize>,
 	},
 	#[structopt(name = "show-url")]
 	ShowUrl {
@@ -73,9 +75,10 @@ fn main() {
 			let url = url.parse::<hyper::Uri>().unwrap();
 			runtime.spawn(fetch_url_verbose(&client, url));
 
-			runtime.run().unwrap();
+			runtime.shutdown_on_idle()
+				.wait().unwrap();
 		},
-		Options::GetList { list_path } => {
+		Options::GetList { list_path, jobs } => {
 			println!("opening list file {}", list_path);
 			let f = File::open(list_path).unwrap();
 			let mut br = BufReader::new(f);
@@ -90,21 +93,26 @@ fn main() {
 					println!("{:?}", msg);
 				}
 			});
+
 			for l in br.lines() {
 				let name = l.unwrap();
 				let url = get_medium_url(&name);
 				let url = url.parse::<hyper::Uri>().unwrap();
 				runtime.spawn(fetch_url(&client, url, s.clone()));
 			}
-			runtime.run().unwrap();
+			runtime.shutdown_on_idle()
+				.wait().unwrap();
 		}
 	}
 }
 
 #[derive(Debug)]
 enum RequestResult {
-	RequestSuccess(Result<(usize, usize), String>),
-	RequestError(String),
+	Success(Result<(usize, usize), String>),
+	// Got a response but with wrong status code
+	WrongResponse(StatusCode),
+	// Error during obtaining a response
+	Error(String),
 }
 
 fn get_medium_url(name :&str) -> String {
@@ -181,12 +189,14 @@ fn fetch_url<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri, s
 							let cursor1 = Cursor::new(&body);
 							let cursor2 = Cursor::new(&body);
 							let res = cmp::cmp_output(cursor1, cursor2);
-							sender.send(RequestResult::RequestSuccess(res));
+							sender.send(RequestResult::Success(res));
+						} else {
+							sender.send(RequestResult::WrongResponse(status));
 						}
 					}))
 				},
 				Err(err) => {
-					sender.send(RequestResult::RequestError(format!("{}", err)));
+					sender.send(RequestResult::Error(format!("{}", err)));
 					Either::B(ok(()))
 				},
 			}
