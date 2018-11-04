@@ -34,6 +34,7 @@ use structopt::StructOpt;
 use crossbeam_channel::Sender;
 
 use tokio::prelude::future::{ok, Either};
+use tokio::runtime::Builder as RuntimeBuilder;
 
 use serde_json::to_string;
 
@@ -49,7 +50,7 @@ enum Options {
 	#[structopt(name = "get-list")]
 	GetList {
 		list_path :String,
-		#[structopt(name = "j")]
+		#[structopt(short = "j", long = "jobs")]
 		jobs :Option<usize>,
 	},
 	#[structopt(name = "show-url")]
@@ -82,7 +83,11 @@ fn main() {
 			println!("opening list file {}", list_path);
 			let f = File::open(list_path).unwrap();
 			let mut br = BufReader::new(f);
-			let mut runtime = Runtime::new().unwrap();
+			let mut rt_build = RuntimeBuilder::new();
+			if let Some(j) = jobs {
+				rt_build.core_threads(j);
+			}
+			let mut runtime = rt_build.build().unwrap();
 
 			let client = create_client();
 
