@@ -1,5 +1,4 @@
 extern crate cmp;
-#[macro_use]
 extern crate crossbeam_channel;
 extern crate serde;
 #[macro_use]
@@ -19,7 +18,7 @@ use std::io::Cursor;
 use std::io::{BufRead, BufReader};
 use std::fs::File;
 
-use hyper::{Client, Request, Body, StatusCode};
+use hyper::{Client, Request, Body};
 use hyper::header::USER_AGENT;
 use hyper::rt::{Future, Stream};
 use hyper::client::connect::{HttpConnector, Connect};
@@ -35,8 +34,6 @@ use structopt::StructOpt;
 use crossbeam_channel::Sender;
 
 use tokio::prelude::future::{ok, Either};
-
-use serde::Serialize;
 
 use serde_json::to_string;
 
@@ -221,5 +218,5 @@ fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sen
 				},
 			}
 		})
-		.map_err(|err| {})
+		.map_err(|_err| {})
 }
