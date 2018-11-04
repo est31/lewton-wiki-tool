@@ -96,9 +96,7 @@ fn main() {
 
 			for l in br.lines() {
 				let name = l.unwrap();
-				let url = get_medium_url(&name);
-				let url = url.parse::<hyper::Uri>().unwrap();
-				runtime.spawn(fetch_url(&client, url, s.clone()));
+				runtime.spawn(fetch_name(&client, name, s.clone()));
 			}
 			runtime.shutdown_on_idle()
 				.wait().unwrap();
@@ -106,12 +104,22 @@ fn main() {
 	}
 }
 
+
 #[derive(Debug)]
-enum RequestResult {
+struct RequestRes {
+	/// Filename that was requested
+	file_name :String,
+	/// Result payload
+	result_kind :RequestResKind,
+}
+
+#[derive(Debug)]
+enum RequestResKind {
+	/// Successful response, with comparison result inside
 	Success(Result<(usize, usize), String>),
-	// Got a response but with wrong status code
+	/// Got a response but with wrong status code
 	WrongResponse(StatusCode),
-	// Error during obtaining a response
+	/// Error during obtaining a response
 	Error(String),
 }
 
@@ -171,13 +179,22 @@ fn fetch_url_verbose<T :'static + Sync + Connect>(client :&Client<T>, url :hyper
 		})
 }
 
-fn fetch_url<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri, sender :Sender<RequestResult>) -> impl Future<Item=(), Error=()> {
+fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sender :Sender<RequestRes>) -> impl Future<Item=(), Error=()> {
+
+	let url = get_medium_url(&name);
+	let url = url.parse::<hyper::Uri>().unwrap();
 
 	let mut req = Request::builder();
 
 	req.uri(url)
 		.header(USER_AGENT, AGENT);
 
+	let send_kind = move |result_kind| {
+		sender.send(RequestRes {
+			file_name : name,
+			result_kind,
+		});
+	};
 	client
 		.request(req.body(Body::empty()).unwrap())
 		.then(move |res| {
@@ -189,14 +206,14 @@ fn fetch_url<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri, s
 							let cursor1 = Cursor::new(&body);
 							let cursor2 = Cursor::new(&body);
 							let res = cmp::cmp_output(cursor1, cursor2);
-							sender.send(RequestResult::Success(res));
+							send_kind(RequestResKind::Success(res));
 						} else {
-							sender.send(RequestResult::WrongResponse(status));
+							send_kind(RequestResKind::WrongResponse(status));
 						}
 					}))
 				},
 				Err(err) => {
-					sender.send(RequestResult::Error(format!("{}", err)));
+					send_kind(RequestResKind::Error(format!("{}", err)));
 					Either::B(ok(()))
 				},
 			}
