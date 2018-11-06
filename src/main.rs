@@ -15,8 +15,9 @@ extern crate percent_encoding;
 extern crate structopt;
 
 use std::io::Cursor;
-use std::io::{BufRead, BufReader};
-use std::fs::File;
+use std::io::{Read, BufRead, BufReader};
+use std::fs::{File, OpenOptions};
+use std::collections::HashMap;
 
 use hyper::{Client, Request, Body};
 use hyper::header::USER_AGENT;
@@ -36,7 +37,7 @@ use crossbeam_channel::Sender;
 use tokio::prelude::future::{ok, Either};
 use tokio::runtime::Builder as RuntimeBuilder;
 
-use serde_json::to_string;
+use serde_json::{to_string, from_str};
 
 // user agent to use
 const AGENT :&str = "lewton wiki tool";
@@ -52,6 +53,8 @@ enum Options {
 		list_path :String,
 		#[structopt(short = "j", long = "jobs")]
 		jobs :Option<usize>,
+		#[structopt(short = "l", long = "logfile")]
+		logfile :Option<String>,
 	},
 	#[structopt(name = "show-url")]
 	ShowUrl {
@@ -79,9 +82,23 @@ fn main() {
 			runtime.shutdown_on_idle()
 				.wait().unwrap();
 		},
-		Options::GetList { list_path, jobs } => {
+		Options::GetList { list_path, jobs, logfile } => {
 			println!("opening list file {}", list_path);
 			let f = File::open(list_path).unwrap();
+
+			let (log_file, prior_log_entries) = if let Some(p) = logfile {
+				println!("opening log file {}", p);
+				let f = OpenOptions::new()
+					.read(true)
+					.write(true)
+					.create(true)
+					.open(&p)
+					.unwrap();
+				let prior_log_entries = parse_result_map(&f).unwrap();
+				(Some(f), Some(prior_log_entries))
+			} else {
+				(None, None)
+			};
 			let mut br = BufReader::new(f);
 			let mut rt_build = RuntimeBuilder::new();
 			if let Some(j) = jobs {
@@ -110,7 +127,7 @@ fn main() {
 }
 
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RequestRes {
 	/// Filename that was requested
 	file_name :String,
@@ -118,7 +135,7 @@ struct RequestRes {
 	result_kind :RequestResKind,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 enum RequestResKind {
 	/// Successful response, with comparison result inside
 	Success(Result<(usize, usize), String>),
@@ -126,6 +143,25 @@ enum RequestResKind {
 	WrongResponse(u16),
 	/// Error during obtaining a response
 	Error(String),
+}
+
+macro_rules! stry {
+	($expr:expr) => (match $expr {
+		$crate::std::result::Result::Ok(val) => val,
+		$crate::std::result::Result::Err(err) => {
+			return Err(format!("{}", err));
+		}
+	})
+}
+
+fn parse_result_map<R :Read>(rdr :R) -> Result<HashMap<String, RequestRes>, String> {
+	let buf_rdr = BufReader::new(rdr);
+	let mut res = HashMap::new();
+	for l in buf_rdr.lines() {
+		let json :RequestRes = stry!(from_str(&stry!(l)));
+		res.insert(json.file_name.clone(), json);
+	}
+	Ok(res)
 }
 
 fn get_medium_url(name :&str) -> String {
