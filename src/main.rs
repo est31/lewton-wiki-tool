@@ -13,6 +13,7 @@ extern crate md5;
 extern crate percent_encoding;
 
 extern crate structopt;
+extern crate chrono;
 
 use std::io::Cursor;
 use std::io::{Read, SeekFrom, Seek, Write, BufRead, BufReader};
@@ -38,6 +39,9 @@ use tokio::prelude::future::{ok, Either};
 use tokio::runtime::Builder as RuntimeBuilder;
 
 use serde_json::{to_string, from_str};
+
+use chrono::DateTime;
+use chrono::offset::Utc;
 
 // user agent to use
 const AGENT :&str = "lewton wiki tool";
@@ -153,6 +157,8 @@ fn main() -> Result<(), StrErr> {
 struct RequestRes {
 	/// Filename that was requested
 	file_name :String,
+	/// Time of entry
+	entry_time :DateTime<Utc>,
 	/// Result payload
 	result_kind :RequestResKind,
 }
@@ -259,6 +265,7 @@ fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sen
 	let send_kind = move |result_kind| {
 		sender.send(RequestRes {
 			file_name : name,
+			entry_time : Utc::now(),
 			result_kind,
 		});
 	};
