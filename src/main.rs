@@ -15,7 +15,7 @@ extern crate percent_encoding;
 extern crate structopt;
 
 use std::io::Cursor;
-use std::io::{Read, BufRead, BufReader};
+use std::io::{Read, SeekFrom, Seek, Write, BufRead, BufReader};
 use std::fs::{File, OpenOptions};
 use std::collections::HashMap;
 
@@ -96,17 +96,18 @@ fn main() -> Result<(), StrErr> {
 			println!("opening list file {}", list_path);
 			let f = File::open(list_path)?;
 
-			let (log_file, prior_log_entries) = if let Some(p) = logfile {
+			let (mut log_file, prior_log_entries) = if let Some(p) = logfile {
 				println!("opening log file {}", p);
-				let f = OpenOptions::new()
+				let mut f = OpenOptions::new()
 					.read(true)
 					.write(true)
 					.create(true)
 					.open(&p)?;
 				let prior_log_entries = parse_result_map(&f)?;
-				(Some(f), Some(prior_log_entries))
+				f.seek(SeekFrom::End(0))?;
+				(Some(f), prior_log_entries)
 			} else {
-				(None, None)
+				(None, HashMap::new())
 			};
 			let mut br = BufReader::new(f);
 			let mut rt_build = RuntimeBuilder::new();
@@ -121,12 +122,24 @@ fn main() -> Result<(), StrErr> {
 
 			std::thread::spawn(move || {
 				while let Some(msg) =  r.recv() {
-					println!("{}", to_string(&msg).unwrap());
+					let msg_str = to_string(&msg).unwrap();
+					println!("{}", msg_str);
+					if let Some(ref mut lf) = &mut log_file {
+						writeln!(lf, "{}", msg_str);
+					}
 				}
 			});
 
 			for l in br.lines() {
 				let name = l?;
+				// If we've already encountered the file, skip it
+				// NOTE: in a further iteration we might want to expand this
+				// and e.g. only skip if there's been a final answer from the server.
+				// This "finality" determination might be done by a function on the
+				// RequestRes struct.
+				if prior_log_entries.contains_key(&name) {
+					continue;
+				}
 				runtime.spawn(fetch_name(&client, name, s.clone()));
 			}
 			runtime.shutdown_on_idle()
