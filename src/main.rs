@@ -62,7 +62,17 @@ enum Options {
 	},
 }
 
-fn main() {
+#[derive(Debug)]
+struct StrErr(String);
+
+use std::fmt::Display;
+impl<T :Display> From<T> for StrErr {
+	fn from(v :T) -> Self {
+		StrErr(format!("{}", v))
+	}
+}
+
+fn main() -> Result<(), StrErr> {
 	let options = Options::from_args();
 
 	match options {
@@ -71,7 +81,7 @@ fn main() {
 			println!("URL is: {}", url);
 		},
 		Options::Get { name } => {
-			let client = create_client();
+			let client = create_client()?;
 
 			let mut runtime = Runtime::new().unwrap();
 
@@ -84,7 +94,7 @@ fn main() {
 		},
 		Options::GetList { list_path, jobs, logfile } => {
 			println!("opening list file {}", list_path);
-			let f = File::open(list_path).unwrap();
+			let f = File::open(list_path)?;
 
 			let (log_file, prior_log_entries) = if let Some(p) = logfile {
 				println!("opening log file {}", p);
@@ -92,9 +102,8 @@ fn main() {
 					.read(true)
 					.write(true)
 					.create(true)
-					.open(&p)
-					.unwrap();
-				let prior_log_entries = parse_result_map(&f).unwrap();
+					.open(&p)?;
+				let prior_log_entries = parse_result_map(&f)?;
 				(Some(f), Some(prior_log_entries))
 			} else {
 				(None, None)
@@ -104,9 +113,9 @@ fn main() {
 			if let Some(j) = jobs {
 				rt_build.core_threads(j);
 			}
-			let mut runtime = rt_build.build().unwrap();
+			let mut runtime = rt_build.build()?;
 
-			let client = create_client();
+			let client = create_client()?;
 
 			let (s, r) = crossbeam_channel::unbounded();
 
@@ -117,13 +126,14 @@ fn main() {
 			});
 
 			for l in br.lines() {
-				let name = l.unwrap();
+				let name = l?;
 				runtime.spawn(fetch_name(&client, name, s.clone()));
 			}
 			runtime.shutdown_on_idle()
-				.wait().unwrap();
+				.wait().map_err(|_| "couldn't shut down the runtime")?;
 		}
 	}
+	Ok(())
 }
 
 
@@ -175,17 +185,17 @@ fn get_medium_url(name :&str) -> String {
 }
 
 /// Creates a client that performs https requests
-fn create_client() -> Client<HttpsConnector<HttpConnector>> {
-	let mut ssl = SslConnector::builder(SslMethod::tls()).unwrap();
-	ssl.set_alpn_protos(b"\x02h2").unwrap();
+fn create_client() -> Result<Client<HttpsConnector<HttpConnector>>, StrErr> {
+	let mut ssl = SslConnector::builder(SslMethod::tls())?;
+	ssl.set_alpn_protos(b"\x02h2")?;
 	let mut http = HttpConnector::new(4);
 	http.enforce_http(false);
-	let https = HttpsConnector::with_connector(http, ssl).unwrap();
+	let https = HttpsConnector::with_connector(http, ssl)?;
 
 	let client = Client::builder()
 		.http2_only(true)
 		.build::<_, hyper::Body>(https);
-	client
+	Ok(client)
 }
 
 fn fetch_url_verbose<T :'static + Sync + Connect>(client :&Client<T>, url :hyper::Uri) -> impl Future<Item=(), Error=()> {
