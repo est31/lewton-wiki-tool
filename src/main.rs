@@ -47,7 +47,7 @@ use chrono::offset::Utc;
 use pbr::ProgressBar;
 
 // user agent to use
-const AGENT :&str = "lewton wiki tool";
+const AGENT :&str = "LewtonWikiTool (https://github.com/est31/lewton-wiki-tool) Hyper/0.12";
 
 #[derive(StructOpt, Debug)]
 enum Options {
