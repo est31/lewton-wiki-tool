@@ -59,6 +59,9 @@ enum Options {
 		jobs :Option<usize>,
 		#[structopt(short = "l", long = "logfile")]
 		logfile :Option<String>,
+		#[structopt(short = "s", long = "no-log-to-stdout",
+			help = "Suppresses logging of the results to stdout")]
+		no_log_to_stdout :bool,
 	},
 	#[structopt(name = "show-url")]
 	ShowUrl {
@@ -96,7 +99,7 @@ fn main() -> Result<(), StrErr> {
 			runtime.shutdown_on_idle()
 				.wait().unwrap();
 		},
-		Options::GetList { list_path, jobs, logfile } => {
+		Options::GetList { list_path, jobs, logfile, no_log_to_stdout } => {
 			println!("opening list file {}", list_path);
 			let f = File::open(list_path)?;
 
@@ -126,9 +129,11 @@ fn main() -> Result<(), StrErr> {
 
 			std::thread::spawn(move || {
 				while let Some(msg) =  r.recv() {
-					let msg_str = to_string(&msg).unwrap();
-					println!("{}", msg_str);
+					if !no_log_to_stdout {
+						println!("{:?}", msg);
+					}
 					if let Some(ref mut lf) = &mut log_file {
+						let msg_str = to_string(&msg).unwrap();
 						writeln!(lf, "{}", msg_str);
 					}
 				}
