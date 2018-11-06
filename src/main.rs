@@ -155,20 +155,11 @@ enum RequestResKind {
 	Error(String),
 }
 
-macro_rules! stry {
-	($expr:expr) => (match $expr {
-		$crate::std::result::Result::Ok(val) => val,
-		$crate::std::result::Result::Err(err) => {
-			return Err(format!("{}", err));
-		}
-	})
-}
-
-fn parse_result_map<R :Read>(rdr :R) -> Result<HashMap<String, RequestRes>, String> {
+fn parse_result_map<R :Read>(rdr :R) -> Result<HashMap<String, RequestRes>, StrErr> {
 	let buf_rdr = BufReader::new(rdr);
 	let mut res = HashMap::new();
 	for l in buf_rdr.lines() {
-		let json :RequestRes = stry!(from_str(&stry!(l)));
+		let json :RequestRes = from_str(&l?)?;
 		res.insert(json.file_name.clone(), json);
 	}
 	Ok(res)
