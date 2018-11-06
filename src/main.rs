@@ -139,13 +139,17 @@ fn main() -> Result<(), StrErr> {
 			for l in br.lines() {
 				names.push(l?);
 			}
+			let prior_final_count = prior_log_entries
+				.iter()
+				.filter(|(_, v)| v.iter().any(RequestRes::is_final))
+				.count();
+			let left_to_handle = names.len() - prior_final_count;
+			println!("Total URL count: {}", names.len());
+			println!("Number of already handled URLs: {}", prior_final_count);
+			println!("URLs left to handle: {}", left_to_handle);
+
 			let mut pb = if progress_bar {
-				let prior_final_count = prior_log_entries
-					.iter()
-					.filter(|(_, v)| v.iter().any(RequestRes::is_final))
-					.count();
-				let count = names.len() - prior_final_count;
-				Some(ProgressBar::new(count as u64))
+				Some(ProgressBar::new(left_to_handle as u64))
 			} else {
 				None
 			};
@@ -163,7 +167,8 @@ fn main() -> Result<(), StrErr> {
 						writeln!(lf, "{}", msg_str);
 					}
 				}
-				pb.map(|mut pb| pb.finish_print(""));
+				pb.map(|mut pb| pb.finish_print("done"));
+				println!();
 			});
 
 			for name in names.iter() {
