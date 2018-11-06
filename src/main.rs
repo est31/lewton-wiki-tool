@@ -132,12 +132,11 @@ fn main() -> Result<(), StrErr> {
 
 			for l in br.lines() {
 				let name = l?;
-				// If we've already encountered the file, skip it
-				// NOTE: in a further iteration we might want to expand this
-				// and e.g. only skip if there's been a final answer from the server.
-				// This "finality" determination might be done by a function on the
-				// RequestRes struct.
-				if prior_log_entries.contains_key(&name) {
+				// If we've already gotten a "final" result for the file,
+				// skip it.
+				if Some(true) == prior_log_entries
+						.get(&name)
+						.map(|v| v.iter().any(RequestRes::is_final)) {
 					continue;
 				}
 				runtime.spawn(fetch_name(&client, name, s.clone()));
@@ -168,12 +167,25 @@ enum RequestResKind {
 	Error(String),
 }
 
-fn parse_result_map<R :Read>(rdr :R) -> Result<HashMap<String, RequestRes>, StrErr> {
+impl RequestRes {
+	/// Returns whether the given instance is "final", as in not to be
+	/// changed.
+	fn is_final(&self) -> bool {
+		match self.result_kind {
+			// Network errors, etc.
+			RequestResKind::Error(_) => false,
+			// Anything else we consider as a final reply.
+			_ => true,
+		}
+	}
+}
+
+fn parse_result_map<R :Read>(rdr :R) -> Result<HashMap<String, Vec<RequestRes>>, StrErr> {
 	let buf_rdr = BufReader::new(rdr);
-	let mut res = HashMap::new();
+	let mut res = HashMap::<_, Vec<RequestRes>>::new();
 	for l in buf_rdr.lines() {
 		let json :RequestRes = from_str(&l?)?;
-		res.insert(json.file_name.clone(), json);
+		res.entry(json.file_name.clone()).or_default().push(json);
 	}
 	Ok(res)
 }
