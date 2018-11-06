@@ -14,6 +14,7 @@ extern crate percent_encoding;
 
 extern crate structopt;
 extern crate chrono;
+extern crate pbr;
 
 use std::io::Cursor;
 use std::io::{Read, SeekFrom, Seek, Write, BufRead, BufReader};
@@ -43,6 +44,8 @@ use serde_json::{to_string, from_str};
 use chrono::DateTime;
 use chrono::offset::Utc;
 
+use pbr::ProgressBar;
+
 // user agent to use
 const AGENT :&str = "lewton wiki tool";
 
@@ -62,6 +65,9 @@ enum Options {
 		#[structopt(short = "s", long = "no-log-to-stdout",
 			help = "Suppresses logging of the results to stdout")]
 		no_log_to_stdout :bool,
+		#[structopt(short = "p", long = "progress",
+			help = "Displays a progress bar, implies -s")]
+		progress_bar :bool,
 	},
 	#[structopt(name = "show-url")]
 	ShowUrl {
@@ -99,7 +105,9 @@ fn main() -> Result<(), StrErr> {
 			runtime.shutdown_on_idle()
 				.wait().unwrap();
 		},
-		Options::GetList { list_path, jobs, logfile, no_log_to_stdout } => {
+		Options::GetList { list_path, jobs, logfile, no_log_to_stdout, progress_bar } => {
+			let no_log_to_stdout = no_log_to_stdout || progress_bar;
+
 			println!("opening list file {}", list_path);
 			let f = File::open(list_path)?;
 
@@ -127,8 +135,26 @@ fn main() -> Result<(), StrErr> {
 
 			let (s, r) = crossbeam_channel::unbounded();
 
+			let mut names :Vec<String> = Vec::new();
+			for l in br.lines() {
+				names.push(l?);
+			}
+			let mut pb = if progress_bar {
+				let prior_final_count = prior_log_entries
+					.iter()
+					.filter(|(_, v)| v.iter().any(RequestRes::is_final))
+					.count();
+				let count = names.len() - prior_final_count;
+				Some(ProgressBar::new(count as u64))
+			} else {
+				None
+			};
+
 			std::thread::spawn(move || {
 				while let Some(msg) =  r.recv() {
+					if let Some(ref mut pb) = &mut pb {
+						pb.inc();
+					}
 					if !no_log_to_stdout {
 						println!("{:?}", msg);
 					}
@@ -137,18 +163,18 @@ fn main() -> Result<(), StrErr> {
 						writeln!(lf, "{}", msg_str);
 					}
 				}
+				pb.map(|mut pb| pb.finish_print(""));
 			});
 
-			for l in br.lines() {
-				let name = l?;
+			for name in names.iter() {
 				// If we've already gotten a "final" result for the file,
 				// skip it.
 				if Some(true) == prior_log_entries
-						.get(&name)
+						.get(name)
 						.map(|v| v.iter().any(RequestRes::is_final)) {
 					continue;
 				}
-				runtime.spawn(fetch_name(&client, name, s.clone()));
+				runtime.spawn(fetch_name(&client, name.to_string(), s.clone()));
 			}
 			runtime.shutdown_on_idle()
 				.wait().map_err(|_| "couldn't shut down the runtime")?;

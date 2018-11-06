@@ -25,6 +25,7 @@ md5 = "0.5"
 #CLI stuff
 structopt = "0.2"
 structopt-derive = "0.2"
+pbr = "1.0"
 
 #Other stuff
 chrono = { version = "0.4", features = ["serde"] }
