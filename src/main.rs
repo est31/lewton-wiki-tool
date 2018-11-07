@@ -68,6 +68,9 @@ enum Options {
 		#[structopt(short = "p", long = "progress",
 			help = "Displays a progress bar, implies -s")]
 		progress_bar :bool,
+		#[structopt(short = "r", long = "requests",
+			help = "Upper limit of parallel requests, default 20")]
+		requests :Option<u32>,
 	},
 	#[structopt(name = "show-url")]
 	ShowUrl {
@@ -105,8 +108,10 @@ fn main() -> Result<(), StrErr> {
 			runtime.shutdown_on_idle()
 				.wait().unwrap();
 		},
-		Options::GetList { list_path, jobs, logfile, no_log_to_stdout, progress_bar } => {
+		Options::GetList { list_path, jobs, logfile,
+				no_log_to_stdout, progress_bar, requests } => {
 			let no_log_to_stdout = no_log_to_stdout || progress_bar;
+			let requests = requests.unwrap_or(20);
 
 			println!("opening list file {}", list_path);
 			let f = File::open(list_path)?;
@@ -154,33 +159,48 @@ fn main() -> Result<(), StrErr> {
 				None
 			};
 
-			std::thread::spawn(move || {
-				while let Some(msg) =  r.recv() {
-					if let Some(ref mut pb) = &mut pb {
-						pb.inc();
+			for i in 0 .. requests as usize {
+				let name_opt = names.get(i);
+				if let Some(name) = name_opt {
+					// If we've already gotten a "final" result for the file,
+					// skip it.
+					if Some(true) == prior_log_entries
+							.get(name)
+							.map(|v| v.iter().any(RequestRes::is_final)) {
+						continue;
 					}
-					if !no_log_to_stdout {
-						println!("{:?}", msg);
-					}
-					if let Some(ref mut lf) = &mut log_file {
-						let msg_str = to_string(&msg).unwrap();
-						writeln!(lf, "{}", msg_str);
-					}
+					runtime.spawn(fetch_name(&client, name.to_string(), s.clone()));
 				}
-				pb.map(|mut pb| pb.finish_print("done"));
-				println!();
-			});
-
-			for name in names.iter() {
-				// If we've already gotten a "final" result for the file,
-				// skip it.
-				if Some(true) == prior_log_entries
-						.get(name)
-						.map(|v| v.iter().any(RequestRes::is_final)) {
-					continue;
-				}
-				runtime.spawn(fetch_name(&client, name.to_string(), s.clone()));
 			}
+
+			let mut offs = requests as usize;
+
+			while let Some(msg) =  r.recv() {
+				if let Some(ref mut pb) = &mut pb {
+					pb.inc();
+				}
+				if !no_log_to_stdout {
+					println!("{:?}", msg);
+				}
+				if let Some(ref mut lf) = &mut log_file {
+					let msg_str = to_string(&msg).unwrap();
+					writeln!(lf, "{}", msg_str);
+				}
+				let name = names.get(offs);
+				offs += 1;
+				if let Some(name) = name {
+					// If we've already gotten a "final" result for the file,
+					// skip it.
+					if Some(true) != prior_log_entries
+							.get(name)
+							.map(|v| v.iter().any(RequestRes::is_final)) {
+						runtime.spawn(fetch_name(&client, name.to_string(), s.clone()));
+					}
+				}
+			}
+			pb.map(|mut pb| pb.finish_print("done"));
+			println!();
+
 			runtime.shutdown_on_idle()
 				.wait().map_err(|_| "couldn't shut down the runtime")?;
 		}
