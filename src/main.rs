@@ -267,12 +267,26 @@ impl RequestRes {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ComparisonRes {
-	pck_issues :usize,
-	pck_total :usize,
-	sample_count :usize,
-	sample_rate :u32,
-	channel_count :u8,
+	n :(usize, usize, usize, u32, u8),
 	vendor :String,
+}
+
+impl ComparisonRes {
+	fn pck_issues(&self) -> usize {
+		self.n.0
+	}
+	fn pck_total(&self) -> usize {
+		self.n.1
+	}
+	fn sample_count(&self) -> usize {
+		self.n.2
+	}
+	fn sample_rate(&self) -> u32 {
+		self.n.3
+	}
+	fn channel_count(&self) -> u8 {
+		self.n.4
+	}
 }
 
 fn parse_result_map<R :Read>(rdr :R) -> Result<HashMap<String, Vec<RequestRes>>, StrErr> {
@@ -374,11 +388,11 @@ fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sen
 							let res = cmp::cmp_output(cursor1, cursor2,
 								|pck_issues, pck_total, sample_count, id, cmt, _setup| {
 									ComparisonRes {
-										pck_issues,
-										pck_total,
-										sample_count,
-										channel_count : id.audio_channels,
-										sample_rate : id.audio_sample_rate,
+										n : (pck_issues,
+											pck_total,
+											sample_count,
+											id.audio_sample_rate,
+											id.audio_channels,),
 										vendor : cmt.vendor.clone(),
 									}
 								});
