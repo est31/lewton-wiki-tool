@@ -12,7 +12,3 @@ for almost all samples in Wikimedia commons.
 ## License
 
 Licensed under Apache 2 or MIT (at your option). For details, see the [LICENSE](LICENSE) file.
-
-## TODO
-
-* List other info in the json like encoder string, duration, channel count

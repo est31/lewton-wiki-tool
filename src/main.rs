@@ -240,7 +240,7 @@ struct RequestRes {
 enum RequestResKind {
 	/// Successful response, and comparison ran without producing a fatal error
 	/// (Mismatches still possible).
-	Success(usize, usize, usize, u8),
+	Success(ComparisonRes),
 	/// Successful response, but comparison produced an error.
 	///
 	/// Note that this is different from a mismatch.
@@ -263,6 +263,16 @@ impl RequestRes {
 			_ => true,
 		}
 	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ComparisonRes {
+	pck_issues :usize,
+	pck_total :usize,
+	sample_count :usize,
+	sample_rate :u32,
+	channel_count :u8,
+	vendor :String,
 }
 
 fn parse_result_map<R :Read>(rdr :R) -> Result<HashMap<String, Vec<RequestRes>>, StrErr> {
@@ -362,12 +372,18 @@ fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sen
 							let cursor1 = Cursor::new(&body);
 							let cursor2 = Cursor::new(&body);
 							let res = cmp::cmp_output(cursor1, cursor2,
-								|pck_issues, pck_total, samples_total, id, _cmt, _setup| {
-									(pck_issues, pck_total, samples_total, id.audio_channels)
-
+								|pck_issues, pck_total, sample_count, id, cmt, _setup| {
+									ComparisonRes {
+										pck_issues,
+										pck_total,
+										sample_count,
+										channel_count : id.audio_channels,
+										sample_rate : id.audio_sample_rate,
+										vendor : cmt.vendor.clone(),
+									}
 								});
 							let kind = match res {
-								Ok((p, q, r, s)) => RequestResKind::Success(p, q, r, s),
+								Ok(r) => RequestResKind::Success(r),
 								Err(s) => RequestResKind::ComparisonErr(s),
 							};
 							send_kind(kind);
