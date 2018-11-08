@@ -159,21 +159,30 @@ fn main() -> Result<(), StrErr> {
 				None
 			};
 
-			for i in 0 .. requests as usize {
-				let name_opt = names.get(i);
-				if let Some(name) = name_opt {
-					// If we've already gotten a "final" result for the file,
-					// skip it.
-					if Some(true) == prior_log_entries
-							.get(name)
-							.map(|v| v.iter().any(RequestRes::is_final)) {
-						continue;
-					}
-					runtime.spawn(fetch_name(&client, name.to_string(), s.clone()));
+			let mut offs = 0;
+			let mut handled = 0;
+			for name in names.iter() {
+				offs += 1;
+				// If we've already gotten a "final" result for the file,
+				// skip it.
+				if Some(true) == prior_log_entries
+						.get(name)
+						.map(|v| v.iter().any(RequestRes::is_final)) {
+					continue;
 				}
+				runtime.spawn(fetch_name(&client, name.to_string(), s.clone()));
+
+				if handled + 1 == requests as usize {
+					break;
+				}
+				handled += 1;
 			}
 
-			let mut offs = requests as usize;
+			let mut s_opt = Some(s);
+
+			if left_to_handle == 0 {
+				s_opt.take();
+			}
 
 			while let Some(msg) =  r.recv() {
 				if let Some(ref mut pb) = &mut pb {
@@ -194,15 +203,23 @@ fn main() -> Result<(), StrErr> {
 					if Some(true) != prior_log_entries
 							.get(name)
 							.map(|v| v.iter().any(RequestRes::is_final)) {
-						runtime.spawn(fetch_name(&client, name.to_string(), s.clone()));
+						runtime.spawn(fetch_name(&client, name.to_string(), s_opt.as_ref().unwrap().clone()));
 					}
+				} else if s_opt.is_some() {
+					s_opt.take();
 				}
 			}
 			pb.map(|mut pb| pb.finish_print("done"));
 			println!();
 
-			runtime.shutdown_on_idle()
+			runtime.shutdown_now()
 				.wait().map_err(|_| "couldn't shut down the runtime")?;
+
+			// I would actually use this, but it hangs indefinitely
+			// if it had something to do, even if every task already
+			// finished.
+			//runtime.shutdown_on_idle()
+			//	.wait().map_err(|_| "couldn't shut down the runtime")?;
 		}
 	}
 	Ok(())
