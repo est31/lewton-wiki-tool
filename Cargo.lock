@@ -94,7 +94,7 @@ dependencies = [
 [[package]]
 name = "cmp"
 version = "0.1.0"
-source = "git+https://github.com/RustAudio/lewton/#fa5baddf0ed4b8f7afba0ae1ac872400b79fe942"
+source = "git+https://github.com/RustAudio/lewton/#735633b64aecd21a0b71b4d69ad77a6f4f5743ed"
 dependencies = [
  "lewton 0.9.3 (git+https://github.com/RustAudio/lewton/)",
  "test-assets 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -386,7 +386,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "lewton"
 version = "0.9.3"
-source = "git+https://github.com/RustAudio/lewton/#fa5baddf0ed4b8f7afba0ae1ac872400b79fe942"
+source = "git+https://github.com/RustAudio/lewton/#735633b64aecd21a0b71b4d69ad77a6f4f5743ed"
 dependencies = [
  "byteorder 1.2.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "ogg 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",

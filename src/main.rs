@@ -239,7 +239,7 @@ struct RequestRes {
 #[derive(Debug, Serialize, Deserialize)]
 enum RequestResKind {
 	/// Successful response, with comparison result inside
-	Success(Result<(usize, usize), String>),
+	Success(Result<(usize, usize, usize, u8), String>),
 	/// Got a response but with wrong status code
 	WrongResponse(u16),
 	/// Error during obtaining a response
@@ -312,7 +312,10 @@ fn fetch_url_verbose<T :'static + Sync + Connect>(client :&Client<T>, url :hyper
 					println!("body is {} characters long", body.len());
 					let cursor1 = Cursor::new(&body);
 					let cursor2 = Cursor::new(&body);
-					let res = cmp::cmp_output(cursor1, cursor2);
+					let res = cmp::cmp_output(cursor1, cursor2,
+						|pck_issues, pck_total, samples_total, id, _cmt, _setup| {
+							(pck_issues, pck_total, samples_total, id.audio_channels)
+						});
 					println!("Comparison result: {:?}", res);
 				}
 			})
@@ -352,7 +355,11 @@ fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sen
 						if status.is_success() {
 							let cursor1 = Cursor::new(&body);
 							let cursor2 = Cursor::new(&body);
-							let res = cmp::cmp_output(cursor1, cursor2);
+							let res = cmp::cmp_output(cursor1, cursor2,
+								|pck_issues, pck_total, samples_total, id, _cmt, _setup| {
+									(pck_issues, pck_total, samples_total, id.audio_channels)
+
+								});
 							send_kind(RequestResKind::Success(res));
 						} else {
 							send_kind(RequestResKind::WrongResponse(status.as_u16()));
