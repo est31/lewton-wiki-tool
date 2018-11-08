@@ -267,10 +267,11 @@ impl RequestRes {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ComparisonRes {
-	n :(usize, usize, usize, u32, u8),
+	n :(usize, usize, usize, bool, u32, u8),
 	vendor :String,
 }
 
+#[allow(unused)]
 impl ComparisonRes {
 	fn pck_issues(&self) -> usize {
 		self.n.0
@@ -281,11 +282,14 @@ impl ComparisonRes {
 	fn sample_count(&self) -> usize {
 		self.n.2
 	}
-	fn sample_rate(&self) -> u32 {
+	fn chained(&self) -> bool {
 		self.n.3
 	}
-	fn channel_count(&self) -> u8 {
+	fn sample_rate(&self) -> u32 {
 		self.n.4
+	}
+	fn channel_count(&self) -> u8 {
+		self.n.5
 	}
 }
 
@@ -343,8 +347,8 @@ fn fetch_url_verbose<T :'static + Sync + Connect>(client :&Client<T>, url :hyper
 					let cursor1 = Cursor::new(&body);
 					let cursor2 = Cursor::new(&body);
 					let res = cmp::cmp_output(cursor1, cursor2,
-						|pck_issues, pck_total, samples_total, id, _cmt, _setup| {
-							(pck_issues, pck_total, samples_total, id.audio_channels)
+						|pck_issues, pck_total, samples_total, chained, id, _cmt, _setup| {
+							(pck_issues, pck_total, samples_total, chained, id.audio_channels)
 						});
 					println!("Comparison result: {:?}", res);
 				}
@@ -386,11 +390,12 @@ fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sen
 							let cursor1 = Cursor::new(&body);
 							let cursor2 = Cursor::new(&body);
 							let res = cmp::cmp_output(cursor1, cursor2,
-								|pck_issues, pck_total, sample_count, id, cmt, _setup| {
+								|pck_issues, pck_total, sample_count, chained, id, cmt, _setup| {
 									ComparisonRes {
 										n : (pck_issues,
 											pck_total,
 											sample_count,
+											chained,
 											id.audio_sample_rate,
 											id.audio_channels,),
 										vendor : cmt.vendor.clone(),
