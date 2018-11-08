@@ -238,8 +238,14 @@ struct RequestRes {
 
 #[derive(Debug, Serialize, Deserialize)]
 enum RequestResKind {
-	/// Successful response, with comparison result inside
-	Success(Result<(usize, usize, usize, u8), String>),
+	/// Successful response, and comparison ran without producing a fatal error
+	/// (Mismatches still possible).
+	Success(usize, usize, usize, u8),
+	/// Successful response, but comparison produced an error.
+	///
+	/// Note that this is different from a mismatch.
+	/// Errors occur e.g. when the stream is invalid or not vorbis or something.
+	ComparisonErr(String),
 	/// Got a response but with wrong status code
 	WrongResponse(u16),
 	/// Error during obtaining a response
@@ -360,7 +366,11 @@ fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sen
 									(pck_issues, pck_total, samples_total, id.audio_channels)
 
 								});
-							send_kind(RequestResKind::Success(res));
+							let kind = match res {
+								Ok((p, q, r, s)) => RequestResKind::Success(p, q, r, s),
+								Err(s) => RequestResKind::ComparisonErr(s),
+							};
+							send_kind(kind);
 						} else {
 							send_kind(RequestResKind::WrongResponse(status.as_u16()));
 						}
