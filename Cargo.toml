@@ -8,7 +8,7 @@ readme = "README.md"
 [dependencies]
 # lewton related
 cmp = { git = "https://github.com/RustAudio/lewton/" }
-crossbeam-channel = "0.2"
+crossbeam-channel = "0.3"
 serde_json = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
@@ -17,7 +17,7 @@ serde_derive = "1.0"
 hyper = "0.12"
 hyper-tls = "0.3"
 openssl = "0.10"
-hyper-openssl = "0.6"
+hyper-openssl = "0.7"
 tokio = "0.1"
 percent-encoding = "1.0"
 md5 = "0.6"

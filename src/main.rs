@@ -184,7 +184,7 @@ fn main() -> Result<(), StrErr> {
 				s_opt.take();
 			}
 
-			while let Some(msg) =  r.recv() {
+			while let Ok(msg) =  r.recv() {
 				if let Some(ref mut pb) = &mut pb {
 					pb.inc();
 				}
@@ -373,7 +373,7 @@ fn fetch_name<T :'static + Sync + Connect>(client :&Client<T>, name :String, sen
 		.header(USER_AGENT, AGENT);
 
 	let send_kind = move |result_kind| {
-		sender.send(RequestRes {
+		let _  = sender.send(RequestRes {
 			file_name : name,
 			entry_time : Utc::now(),
 			result_kind,
