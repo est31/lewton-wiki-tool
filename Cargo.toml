@@ -20,7 +20,7 @@ openssl = "0.10"
 hyper-openssl = "0.6"
 tokio = "0.1"
 percent-encoding = "1.0"
-md5 = "0.5"
+md5 = "0.6"
 
 #CLI stuff
 structopt = "0.2"
